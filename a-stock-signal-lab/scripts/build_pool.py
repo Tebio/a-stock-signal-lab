@@ -11,7 +11,7 @@ if "/opt/data/python-libs" not in sys.path:
 
 import akshare as ak
 
-parser = argparse.ArgumentParser(description="Build T-1 Fenjue candidate pool")
+parser = argparse.ArgumentParser(description="Build T-1 A-Stock Signal Lab candidate pool")
 parser.add_argument("--date", default="20260508", help="Trade date, e.g. 20260508")
 parser.add_argument("--out-dir", default="/opt/data/fenjue", help="Output directory")
 parser.add_argument("--top", type=int, default=300)

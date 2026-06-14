@@ -25,7 +25,7 @@ def extract_main_board_codes(text: str, limit: int = 20) -> list[str]:
 
 
 def format_group_report(payload: dict) -> str:
-    lines = ["焚诀个股研究（研究辅助，不是买卖指令）"]
+    lines = ["A股信号实验室个股研究（研究辅助，不是买卖指令）"]
     for code, row in payload.get("stocks", {}).items():
         if row.get("error"):
             lines.append(f"{code}：{row['error']}")

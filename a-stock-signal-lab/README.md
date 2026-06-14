@@ -1,4 +1,4 @@
-# 焚诀（Fenjue）— A股短线技术筛选系统
+# A-Stock Signal Lab — A股短线技术研究系统
 
 基于 MA5/MA20 金叉、MACD、成交额等多策略交叉筛选沪深主板强势标的。
 

@@ -123,7 +123,7 @@ def print_analysis(payload: dict) -> None:
 def cmd_init(args: argparse.Namespace) -> int:
     runtime = build_runtime(args.root)
     runtime.initialize()
-    print(f"Fenjue database ready: {runtime.db_path}")
+    print(f"A-Stock Signal Lab database ready: {runtime.db_path}")
     return 0
 
 
@@ -244,7 +244,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(description="Portable Fenjue toolkit")
+    root = argparse.ArgumentParser(description="A-Stock Signal Lab toolkit")
     root.add_argument("--root", help="runtime data directory")
     sub = root.add_subparsers(dest="command", required=True)
 

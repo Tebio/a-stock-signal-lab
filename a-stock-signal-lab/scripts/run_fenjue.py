@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""焚诀 20260508 - 仅沪深主板 (排除300/301/688/920)"""
+"""A股信号实验室 20260508 - 仅沪深主板 (排除300/301/688/920)"""
 import os, sys, json
 
 for k in list(os.environ.keys()):
@@ -26,7 +26,7 @@ f = qs[
 ].copy()
 f = f.sort_values('涨跌幅', ascending=False)
 
-print(f'🔥 焚诀 5/8 沪深主板: {len(f)}只\n')
+print(f'A股信号实验室 5/8 沪深主板: {len(f)}只\n')
 
 results = []
 for _, r in f.iterrows():
