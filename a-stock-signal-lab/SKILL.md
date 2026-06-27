@@ -31,7 +31,8 @@ description: A股短线研究、持仓账本、事件冻结、个股股性、买
 5. 用 `evaluate_entry_window()` 分别判断 09:40、10:30 或 14:30，不把竞价区间当买入指令。
 6. 涨停买入无 A/B 级队列证据、跌停卖出无买盘证据时，成交状态必须为 `unknown`。
 7. 运行五策略族门控，输出动作、拒绝原因、最大风险上限、失效条件和下一检查点。
-8. 明确提示这是研究辅助；不自动下单。
+8. `research`、`shadow`、`production` 必须经过同一决策图；只有已发布且策略族/政策版本匹配的 production 策略可以带 `executable=true`。
+9. 明确提示这是研究辅助；不自动下单。
 
 ## 环境
 
@@ -89,6 +90,29 @@ python -m fenjue --root /opt/data/fenjue v2-init
 python -m fenjue --root /opt/data/fenjue v2-integrity
 ```
 
+### 盘中标签与基准回归
+
+```bash
+python -m fenjue --root /opt/data/fenjue v2-backfill-outcome \
+  --intent-id INTENT_ID --calculation-version outcome-v1
+
+python -m fenjue --root /opt/data/fenjue v2-baseline run \
+  --payload-json baseline-run.json
+```
+
+### 运行模式
+
+```bash
+python -m fenjue --root /opt/data/fenjue v2-decide \
+  --context-json context.json --run-mode research
+
+python -m fenjue --root /opt/data/fenjue v2-decide \
+  --context-json context.json --run-mode shadow \
+  --strategy-version-id strategy-shadow-v1
+```
+
+事件冻结始终在技术评分前执行。人工申请通过只代表可以进入解除流程，不会自动解除冻结；正式解除仍需写 `freeze_release_audits`。
+
 ### 记录用户提供的持仓
 
 ```bash
@@ -112,5 +136,6 @@ python -m fenjue --root /opt/data/fenjue v2-ledger \
 - 已验证策略：`references/verified-strategies.md`
 - V2共享契约：`docs/superpowers/specs/context_contract.md`
 - 持仓、事件、成交、策略族与影子治理：`docs/superpowers/specs/01_position_ledger_design.md` 至 `05_backtest_governance_and_shadow_run.md`
+- 八个工程闭环：`docs/engineering/01_trading_calendar.md` 至 `08_ci.md`
 
 只在任务需要时读取对应参考文件。

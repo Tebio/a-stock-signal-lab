@@ -1,0 +1,49 @@
+{
+  "strategy_version_id": "fixture-strategy-production",
+  "context": {
+    "decision_at_ms": 1000,
+    "account_id": "main",
+    "code": "600378",
+    "logic_cluster_id": "specialty_gases",
+    "user_intent": "fixture replay",
+    "requested_action": "ADD",
+    "position_mode": "CORE_HOLD",
+    "exchange_status": "CONTINUOUS",
+    "event_freezes": [],
+    "logic_gate": {
+      "eligible_for_core_hold": true,
+      "eligible_for_new_entry": true,
+      "logic_invalidated": false
+    },
+    "market_regime": "NEUTRAL",
+    "market_features": {},
+    "market_microstructure": {},
+    "execution": {
+      "fill_status": "fillable",
+      "data_quality": "C",
+      "reason_code": "FIXTURE_PRICE",
+      "conservative_fill_price_x10000": 100000,
+      "estimated_fill_probability_ratio": null
+    },
+    "risk_precheck": {
+      "status": "ELIGIBLE",
+      "config_id": "fixture-risk",
+      "max_incremental_exposure_ratio": 0.1
+    },
+    "probability_status": "probability_ready",
+    "source_selection_policy_version": "source-v1",
+    "context_contract_version": "fenjue-context-v2",
+    "model_version": "fenjue-family-v2",
+    "policy_version": "fenjue-policy-v2",
+    "estimated_probability_ratio": 0.7
+  },
+  "expected": {
+    "graph_action": "ADD",
+    "research_action": "ALLOW_ADD_RESEARCH",
+    "shadow_action": "SHADOW_ADD",
+    "production_action": "ADD",
+    "research_executable": false,
+    "shadow_executable": false,
+    "production_executable": true
+  }
+}

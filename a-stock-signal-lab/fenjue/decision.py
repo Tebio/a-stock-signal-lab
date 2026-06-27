@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+import hashlib
 import json
 from typing import Any
 from uuid import uuid4
@@ -49,11 +50,32 @@ class DecisionResult:
     probability_ratio: float | None
     confidence: str
     next_checkpoint_ms: int | None
+    run_mode: str = "research"
+    graph_action: str = ""
+    executable: bool = False
+    decision_graph_hash: str = ""
+    strategy_version_id: str | None = None
 
 
 class DecisionEngine:
-    def __init__(self, db: FenjueV2Database):
+    EXECUTABLE_ACTIONS = {
+        "ADD", "NEW_ENTRY", "TACTICAL_BUY", "TACTICAL_SELL",
+        "RISK_REDUCE", "EXIT",
+    }
+
+    def __init__(
+        self,
+        db: FenjueV2Database,
+        run_mode: str = "research",
+        strategy_version_id: str | None = None,
+    ):
+        if run_mode not in {"research", "shadow", "production"}:
+            raise ValueError(f"unsupported run mode: {run_mode}")
+        if run_mode in {"shadow", "production"} and not strategy_version_id:
+            raise ValueError(f"{run_mode} mode requires strategy_version_id")
         self.db = db
+        self.run_mode = run_mode
+        self.strategy_version_id = strategy_version_id
 
     @staticmethod
     def _select_family(context: DecisionContext) -> str:
@@ -206,11 +228,7 @@ class DecisionEngine:
                     ("PROBABILITY_NOT_READY",), None, None, "MEDIUM",
                     next_checkpoint_ms,
                 )
-            action = (
-                "ALLOW_NEW_ENTRY_RESEARCH"
-                if family == "NEW_ENTRY"
-                else f"ALLOW_{context.requested_action}_RESEARCH"
-            )
+            action = context.requested_action
             probability = context.estimated_probability_ratio
             confidence = "MEDIUM" if context.execution.data_quality == "C" else "HIGH"
             return self._persist(
@@ -237,6 +255,15 @@ class DecisionEngine:
         confidence: str,
         next_checkpoint_ms: int | None,
     ) -> DecisionResult:
+        graph_action = action
+        graph_reasons = reasons
+        graph_hash = self._graph_hash(
+            context, family, graph_action, graph_reasons, max_exposure_ratio,
+            probability_ratio, confidence, next_checkpoint_ms,
+        )
+        action, reasons, executable = self._project_output(
+            context, family, graph_action, graph_reasons
+        )
         human_reason = "; ".join(reasons)
         with self.db.transaction() as connection:
             connection.execute(
@@ -258,6 +285,21 @@ class DecisionEngine:
                     context.model_version, context.policy_version,
                     context.probability_status, action, json.dumps(reasons),
                     human_reason, next_checkpoint_ms, context.decision_at_ms,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO decision_run_traces
+                    (trace_id,decision_id,run_mode,strategy_version_id,
+                     decision_graph_hash,graph_action,graph_reason_codes_json,
+                     output_action,output_reason_codes_json,executable,created_at_ms)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    f"run-trace-{uuid4().hex}", decision_id, self.run_mode,
+                    self.strategy_version_id, graph_hash, graph_action,
+                    json.dumps(graph_reasons), action, json.dumps(reasons),
+                    int(executable), context.decision_at_ms,
                 ),
             )
             score_name = {
@@ -306,10 +348,84 @@ class DecisionEngine:
                             context.decision_at_ms,
                         ),
                     )
+            if self.run_mode == "shadow" and self.strategy_version_id:
+                connection.execute(
+                    """
+                    INSERT INTO shadow_decisions
+                        (shadow_id,production_decision_id,strategy_version_id,code,
+                         logic_cluster_id,strategy_family,decision_at_ms,action,
+                         max_exposure_ratio,reason_codes_json,feature_snapshot_id,
+                         data_manifest_id,displayed_to_user,created_at_ms)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?)
+                    """,
+                    (
+                        f"shadow-{uuid4().hex}", None, self.strategy_version_id,
+                        context.code, context.logic_cluster_id, family,
+                        context.decision_at_ms, action, max_exposure_ratio or 0.0,
+                        json.dumps(reasons), context.feature_snapshot_id,
+                        context.data_manifest_id, context.decision_at_ms,
+                    ),
+                )
         return DecisionResult(
             decision_id, family, action, reasons, max_exposure_ratio,
-            probability_ratio, confidence, next_checkpoint_ms,
+            probability_ratio, confidence, next_checkpoint_ms, self.run_mode,
+            graph_action, executable, graph_hash, self.strategy_version_id,
         )
+
+    def _project_output(
+        self,
+        context: DecisionContext,
+        family: str,
+        graph_action: str,
+        graph_reasons: tuple[str, ...],
+    ) -> tuple[str, tuple[str, ...], bool]:
+        if graph_action not in self.EXECUTABLE_ACTIONS:
+            return graph_action, graph_reasons, False
+        if self.run_mode == "research":
+            return f"ALLOW_{graph_action}_RESEARCH", graph_reasons, False
+        if self.run_mode == "shadow":
+            return f"SHADOW_{graph_action}", graph_reasons, False
+        strategy = self.db.connection.execute(
+            """SELECT status,strategy_family,policy_version
+               FROM strategy_versions WHERE strategy_version_id=?""",
+            (self.strategy_version_id,),
+        ).fetchone()
+        if strategy is None or strategy["status"] != "production":
+            return "REJECT", ("STRATEGY_NOT_PRODUCTION",), False
+        if strategy["strategy_family"] != family:
+            return "REJECT", ("STRATEGY_FAMILY_MISMATCH",), False
+        if strategy["policy_version"] != context.policy_version:
+            return "REJECT", ("STRATEGY_POLICY_MISMATCH",), False
+        return graph_action, graph_reasons, True
+
+    @staticmethod
+    def _graph_hash(
+        context: DecisionContext,
+        family: str,
+        graph_action: str,
+        graph_reasons: tuple[str, ...],
+        max_exposure_ratio: float | None,
+        probability_ratio: float | None,
+        confidence: str,
+        next_checkpoint_ms: int | None,
+    ) -> str:
+        payload = {
+            "context": {
+                key: value for key, value in asdict(context).items()
+                if key != "decision_id"
+            },
+            "family": family,
+            "action": graph_action,
+            "reasons": graph_reasons,
+            "max_exposure_ratio": max_exposure_ratio,
+            "probability_ratio": probability_ratio,
+            "confidence": confidence,
+            "next_checkpoint_ms": next_checkpoint_ms,
+        }
+        encoded = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     @staticmethod
     def _gate_for_reason(reason: str) -> str:

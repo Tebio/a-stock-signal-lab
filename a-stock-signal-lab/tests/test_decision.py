@@ -6,6 +6,7 @@ from pathlib import Path
 from fenjue.decision import DecisionContext, DecisionEngine
 from fenjue.execution import FillAssessment
 from fenjue.ledger import PositionLedger, RiskPrecheck
+from fenjue.migrations import MigrationRunner
 from fenjue.v2db import FenjueV2Database
 
 
@@ -90,6 +91,20 @@ class DecisionEngineTests(unittest.TestCase):
         values.update(overrides)
         return DecisionContext(**values)
 
+    def add_strategy(self, strategy_id, status):
+        self.db.connection.execute(
+            """INSERT INTO strategy_versions
+            (strategy_version_id,strategy_family,sample_cluster,code_sha256,
+             feature_set_version,policy_version,parameter_json,status,
+             probability_status,created_at_ms)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                strategy_id, "NEW_ENTRY", "EVENT_LOGIC_AUCTION", "hash",
+                "features-v1", "fenjue-policy-v2", "{}", status,
+                "probability_ready", 1,
+            ),
+        )
+
     def test_strong_logic_does_not_override_retreat_for_add(self):
         result = self.engine.decide(self.context(market_regime="RETREAT"))
         self.assertEqual(result.strategy_family, "NEW_ENTRY")
@@ -147,6 +162,59 @@ class DecisionEngineTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(row["logic_cluster_id"], "electronic_specialty_gases")
         self.assertEqual(row["reason_code"], "MARKET_RETREAT")
+
+    def test_all_run_modes_share_graph_but_only_production_is_executable(self):
+        self.add_strategy("strategy-prod", "production")
+        results = {
+            mode: DecisionEngine(
+                self.db, run_mode=mode, strategy_version_id="strategy-prod"
+            ).decide(self.context(decision_id=f"decision-{mode}"))
+            for mode in ("research", "shadow", "production")
+        }
+        self.assertEqual({result.graph_action for result in results.values()}, {"ADD"})
+        self.assertEqual(len({result.decision_graph_hash for result in results.values()}), 1)
+        self.assertEqual(results["research"].action, "ALLOW_ADD_RESEARCH")
+        self.assertEqual(results["shadow"].action, "SHADOW_ADD")
+        self.assertFalse(results["research"].executable)
+        self.assertFalse(results["shadow"].executable)
+        self.assertEqual(results["production"].action, "ADD")
+        self.assertTrue(results["production"].executable)
+
+    def test_production_rejects_candidate_strategy_after_shared_graph_passes(self):
+        self.add_strategy("strategy-candidate", "candidate")
+        result = DecisionEngine(
+            self.db, run_mode="production", strategy_version_id="strategy-candidate"
+        ).decide(self.context(decision_id="decision-candidate"))
+        self.assertEqual(result.graph_action, "ADD")
+        self.assertEqual(result.action, "REJECT")
+        self.assertFalse(result.executable)
+        self.assertIn("STRATEGY_NOT_PRODUCTION", result.reason_codes)
+
+    def test_run_trace_and_shadow_record_are_persisted(self):
+        self.add_strategy("strategy-shadow", "shadow")
+        result = DecisionEngine(
+            self.db, run_mode="shadow", strategy_version_id="strategy-shadow"
+        ).decide(self.context(decision_id="decision-shadow-trace"))
+        trace = self.db.connection.execute(
+            "SELECT run_mode,graph_action,output_action,executable FROM decision_run_traces WHERE decision_id=?",
+            (result.decision_id,),
+        ).fetchone()
+        self.assertEqual(tuple(trace), ("shadow", "ADD", "SHADOW_ADD", 0))
+        self.assertEqual(
+            self.db.connection.execute(
+                "SELECT COUNT(*) FROM shadow_decisions WHERE strategy_version_id='strategy-shadow'"
+            ).fetchone()[0],
+            1,
+        )
+
+    def test_migration_006_rolls_back_and_reapplies(self):
+        runner = MigrationRunner(self.db.connection, self.db.resource_dir / "migrations")
+        runner.rollback("006")
+        tables = {row[0] for row in self.db.connection.execute("SELECT name FROM sqlite_schema WHERE type='table'")}
+        self.assertNotIn("decision_run_traces", tables)
+        runner.apply_all()
+        tables = {row[0] for row in self.db.connection.execute("SELECT name FROM sqlite_schema WHERE type='table'")}
+        self.assertIn("decision_run_traces", tables)
 
 
 if __name__ == "__main__":

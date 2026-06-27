@@ -159,6 +159,119 @@ class EventStore:
         )
         return freeze_id
 
+    def apply_default_freezes(
+        self, event_version_id: str, *, evaluated_at_ms: int
+    ) -> list[dict[str, Any]]:
+        event = self.db.connection.execute(
+            "SELECT * FROM normalized_events WHERE event_version_id=?",
+            (event_version_id,),
+        ).fetchone()
+        if event is None:
+            raise KeyError(f"event not found: {event_version_id}")
+        if event["status"] != "active" or event["available_at_ms"] > evaluated_at_ms:
+            return []
+        severity_rank = {"info": 0, "watch": 1, "high": 2, "critical": 3}
+        policies = self.db.connection.execute(
+            """SELECT * FROM event_freeze_policies
+               WHERE event_type=? AND active=1 ORDER BY freeze_scope,policy_id""",
+            (event["event_type"],),
+        ).fetchall()
+        codes = [
+            row[0] for row in self.db.connection.execute(
+                """SELECT entity_id FROM event_entity_links
+                   WHERE event_version_id=? AND entity_type='stock'""",
+                (event_version_id,),
+            )
+        ]
+        created_ids: list[str] = []
+        with self.db.transaction():
+            for policy in policies:
+                if severity_rank[event["severity"]] < severity_rank[policy["minimum_severity"]]:
+                    continue
+                if event["evidence_tier"] not in json.loads(
+                    policy["accepted_evidence_tiers_json"]
+                ):
+                    continue
+                for code in codes:
+                    existing = self.db.connection.execute(
+                        """SELECT freeze_id FROM event_freezes
+                           WHERE code=? AND event_version_id=? AND freeze_scope=?
+                             AND policy_version=? AND status='active'""",
+                        (
+                            code, event_version_id, policy["freeze_scope"],
+                            policy["policy_version"],
+                        ),
+                    ).fetchone()
+                    if existing:
+                        created_ids.append(existing["freeze_id"])
+                        continue
+                    created_ids.append(
+                        self.freeze(
+                            code, event_version_id, policy["freeze_scope"],
+                            f"{event['event_type']}: {event['title']}",
+                            event["available_at_ms"],
+                            policy["release_condition"], policy["policy_version"],
+                            evaluated_at_ms,
+                        )
+                    )
+        return [
+            dict(self.db.connection.execute(
+                "SELECT * FROM event_freezes WHERE freeze_id=?", (freeze_id,)
+            ).fetchone())
+            for freeze_id in created_ids
+        ]
+
+    def request_override(
+        self,
+        freeze_id: str,
+        *,
+        requested_by: str,
+        requested_action: str,
+        reason: str,
+        evidence: dict[str, Any],
+        created_at_ms: int,
+    ) -> str:
+        freeze = self.db.connection.execute(
+            "SELECT status FROM event_freezes WHERE freeze_id=?", (freeze_id,)
+        ).fetchone()
+        if freeze is None:
+            raise KeyError(f"freeze not found: {freeze_id}")
+        if freeze["status"] != "active":
+            raise ValueError("override requests require an active freeze")
+        request_id = f"override-request-{uuid4().hex}"
+        self.db.connection.execute(
+            """INSERT INTO override_requests
+            (request_id,freeze_id,requested_by,requested_action,request_reason,
+             request_evidence_json,status,created_at_ms)
+            VALUES (?,?,?,?,?,?,'pending',?)""",
+            (
+                request_id, freeze_id, requested_by, requested_action, reason,
+                json.dumps(evidence, ensure_ascii=False, sort_keys=True), created_at_ms,
+            ),
+        )
+        return request_id
+
+    def review_override(
+        self,
+        request_id: str,
+        *,
+        reviewed_by: str,
+        approved: bool,
+        review_note: str,
+        reviewed_at_ms: int,
+    ) -> None:
+        updated = self.db.connection.execute(
+            """UPDATE override_requests
+               SET status=?,reviewed_by=?,review_note=?,reviewed_at_ms=?
+               WHERE request_id=? AND status='pending'""",
+            (
+                "approved" if approved else "rejected", reviewed_by,
+                review_note, reviewed_at_ms, request_id,
+            ),
+        ).rowcount
+        if updated != 1:
+            raise ValueError("override request is missing or already reviewed")
+
     def release_freeze(
         self,
         freeze_id: str,
@@ -170,6 +283,18 @@ class EventStore:
         released_at_ms: int,
         release_event_version_id: str | None = None,
     ) -> str:
+        if release_type == "manual" or actor == "user":
+            request_id = evidence.get("override_request_id")
+            approved = self.db.connection.execute(
+                """SELECT 1 FROM override_requests
+                   WHERE request_id=? AND freeze_id=? AND requested_action='release'
+                     AND status='approved'""",
+                (request_id, freeze_id),
+            ).fetchone()
+            if approved is None:
+                raise PermissionError(
+                    "manual freeze release requires an approved override request"
+                )
         audit_id = f"freeze-release-{uuid4().hex}"
         with self.db.transaction() as connection:
             freeze = connection.execute(

@@ -10,16 +10,21 @@ import time
 from pathlib import Path
 
 from .daily import SinaIndexDailyProvider, TencentDailyProvider
+from .budget import PortfolioBudgetService
+from .baseline import BaselineRunner
 from .data_services import DailyBarService, MinuteBarService, UpstreamGate
 from .engine import FenjueEngine
 from .provider import SinaMinuteProvider, SinaTencentProvider
+from .pool_scripts import main_build_pool, main_screen_pool, main_screen_pool2
 from .runtime import Runtime
 from .service import QuoteService
 from .validation import summarize_signal_performance, update_signal_outcomes
 from .workflows import capture_pool_snapshot, scan_pool_regime_shifts
 from .decision import DecisionContext, DecisionEngine
 from .execution import FillAssessment
+from .events import EventStore
 from .ledger import PositionLedger, RiskPrecheck
+from .outcomes import IntradayOutcomeBackfiller
 from .v2db import FenjueV2Database
 
 
@@ -192,9 +197,103 @@ def cmd_v2_decide(args: argparse.Namespace) -> int:
         risk_precheck=RiskPrecheck(**risk) if risk else None,
     )
     with build_v2_database(args.root) as database:
-        result = DecisionEngine(database).decide(context)
+        result = DecisionEngine(
+            database,
+            run_mode=args.run_mode,
+            strategy_version_id=args.strategy_version_id,
+        ).decide(context)
     print_json(asdict(result))
     return 0
+
+
+def cmd_v2_backfill_outcome(args: argparse.Namespace) -> int:
+    calculated_at_ms = args.calculated_at_ms or int(time.time() * 1000)
+    with build_v2_database(args.root) as database:
+        result = IntradayOutcomeBackfiller(database).backfill_intent(
+            args.intent_id,
+            calculation_version=args.calculation_version,
+            calculated_at_ms=calculated_at_ms,
+        )
+    print_json(asdict(result))
+    return 0 if result.outcome_status == "scored" else 2
+
+
+def cmd_v2_budget(args: argparse.Namespace) -> int:
+    payload = json.loads(Path(args.payload_json).read_text(encoding="utf-8"))
+    with build_v2_database(args.root) as database:
+        service = PortfolioBudgetService(database)
+        if args.operation == "open":
+            budget_id = service.open_budget(**payload)
+            result = {"budget_id": budget_id, "status": "ACTIVE"}
+        elif args.operation == "precheck":
+            result = asdict(service.precheck(**payload))
+        else:
+            consumption_id = payload.pop("consumption_id")
+            result = asdict(service.consume(consumption_id, **payload))
+    print_json(result)
+    return 0
+
+
+def cmd_v2_freeze(args: argparse.Namespace) -> int:
+    payload = json.loads(Path(args.payload_json).read_text(encoding="utf-8"))
+    with build_v2_database(args.root) as database:
+        store = EventStore(database)
+        if args.operation == "apply":
+            event_version_id = payload.pop("event_version_id")
+            result = store.apply_default_freezes(event_version_id, **payload)
+        elif args.operation == "request":
+            freeze_id = payload.pop("freeze_id")
+            result = {"request_id": store.request_override(freeze_id, **payload)}
+        elif args.operation == "review":
+            request_id = payload.pop("request_id")
+            store.review_override(request_id, **payload)
+            result = {"request_id": request_id, "status": "reviewed"}
+        else:
+            freeze_id = payload.pop("freeze_id")
+            result = {"release_audit_id": store.release_freeze(freeze_id, **payload)}
+    print_json(result if isinstance(result, dict) else {"freezes": result})
+    return 0
+
+
+def cmd_v2_baseline(args: argparse.Namespace) -> int:
+    payload = json.loads(Path(args.payload_json).read_text(encoding="utf-8"))
+    with build_v2_database(args.root) as database:
+        runner = BaselineRunner(database)
+        if args.operation == "register":
+            runner.register_baseline(**payload)
+            result = {"baseline_id": payload["baseline_id"], "status": "registered"}
+        else:
+            result = asdict(runner.run(**payload))
+    print_json(result)
+    return 0
+
+
+def cmd_build_pool(args: argparse.Namespace) -> int:
+    argv = ["--top", str(args.top), "--sleep", str(args.sleep)]
+    if args.root:
+        argv.extend(["--root", args.root])
+    if args.date:
+        argv.extend(["--date", args.date])
+    if args.out_dir:
+        argv.extend(["--out-dir", args.out_dir])
+    return main_build_pool(argv)
+
+
+def _screen_pool_command(args: argparse.Namespace, entrypoint) -> int:
+    argv = []
+    if args.root:
+        argv.extend(["--root", args.root])
+    if args.pool_file:
+        argv.append(args.pool_file)
+    return entrypoint(argv)
+
+
+def cmd_screen_pool(args: argparse.Namespace) -> int:
+    return _screen_pool_command(args, main_screen_pool)
+
+
+def cmd_screen_pool2(args: argparse.Namespace) -> int:
+    return _screen_pool_command(args, main_screen_pool2)
 
 
 def cmd_quote(args: argparse.Namespace) -> int:
@@ -356,7 +455,65 @@ def parser() -> argparse.ArgumentParser:
         "v2-decide", help="evaluate a complete frozen V2 decision context JSON"
     )
     v2_decide.add_argument("--context-json", required=True)
+    v2_decide.add_argument(
+        "--run-mode", choices=["research", "shadow", "production"],
+        default="research",
+    )
+    v2_decide.add_argument("--strategy-version-id")
     v2_decide.set_defaults(func=cmd_v2_decide)
+
+    v2_outcome = sub.add_parser(
+        "v2-backfill-outcome",
+        help="audit and backfill next-trade-date intraday labels for an intent",
+    )
+    v2_outcome.add_argument("--intent-id", required=True)
+    v2_outcome.add_argument("--calculation-version", required=True)
+    v2_outcome.add_argument("--calculated-at-ms", type=int)
+    v2_outcome.set_defaults(func=cmd_v2_backfill_outcome)
+
+    v2_budget = sub.add_parser(
+        "v2-budget", help="open, precheck, or consume a two-phase portfolio budget"
+    )
+    v2_budget.add_argument("operation", choices=["open", "precheck", "consume"])
+    v2_budget.add_argument("--payload-json", required=True)
+    v2_budget.set_defaults(func=cmd_v2_budget)
+
+    v2_freeze = sub.add_parser(
+        "v2-freeze", help="apply event freezes and audit override/release workflow"
+    )
+    v2_freeze.add_argument(
+        "operation", choices=["apply", "request", "review", "release"]
+    )
+    v2_freeze.add_argument("--payload-json", required=True)
+    v2_freeze.set_defaults(func=cmd_v2_freeze)
+
+    v2_baseline = sub.add_parser(
+        "v2-baseline", help="register and run auditable strategy-vs-baseline comparisons"
+    )
+    v2_baseline.add_argument("operation", choices=["register", "run"])
+    v2_baseline.add_argument("--payload-json", required=True)
+    v2_baseline.set_defaults(func=cmd_v2_baseline)
+
+    build_pool = sub.add_parser(
+        "build-pool", help="build a candidate pool without hardcoded paths or dates"
+    )
+    build_pool.add_argument("--date")
+    build_pool.add_argument("--out-dir")
+    build_pool.add_argument("--top", type=int, default=300)
+    build_pool.add_argument("--sleep", type=float, default=0.4)
+    build_pool.set_defaults(func=cmd_build_pool)
+
+    screen_pool = sub.add_parser(
+        "screen-pool", help="run compatibility pool strategies 1-3"
+    )
+    screen_pool.add_argument("pool_file", nargs="?")
+    screen_pool.set_defaults(func=cmd_screen_pool)
+
+    screen_pool2 = sub.add_parser(
+        "screen-pool2", help="run compatibility pool strategies 4-6"
+    )
+    screen_pool2.add_argument("pool_file", nargs="?")
+    screen_pool2.set_defaults(func=cmd_screen_pool2)
 
     quote = sub.add_parser("quote", help="fetch dual-source realtime quotes")
     quote.add_argument("codes", nargs="+")
