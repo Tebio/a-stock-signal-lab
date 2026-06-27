@@ -9,7 +9,12 @@ REPOSITORY_ROOT = PROJECT_ROOT.parent
 
 class ContinuousIntegrationContractTests(unittest.TestCase):
     def test_workflow_declares_all_five_quality_gates(self):
-        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "quality.yml").read_text(
+        workflow_path = REPOSITORY_ROOT / ".github" / "workflows" / "quality.yml"
+        if not workflow_path.exists():
+            self.skipTest(
+                "repository-level workflow is not included in a subdirectory Skill install"
+            )
+        workflow = workflow_path.read_text(
             encoding="utf-8"
         )
         for job in (
