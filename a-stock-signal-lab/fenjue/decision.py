@@ -173,6 +173,17 @@ class DecisionEngine:
                 next_checkpoint_ms,
             )
 
+        timing_gate = (context.market_features or {}).get("timing_gate")
+        if family in {"NEW_ENTRY", "TACTICAL_T"} and timing_gate:
+            if not timing_gate.get("eligible", False):
+                timing_reasons = tuple(
+                    timing_gate.get("reason_codes") or ["TIMING_GATE_REJECTED"]
+                )
+                return self._persist(
+                    context, decision_id, family, "REJECT", timing_reasons,
+                    None, None, "HIGH", next_checkpoint_ms,
+                )
+
         if family in {"NEW_ENTRY", "TACTICAL_T"}:
             if context.risk_precheck is None or not context.risk_precheck.max_incremental_exposure_ratio:
                 return self._persist(
@@ -310,4 +321,6 @@ class DecisionEngine:
             return "probability_release_gate"
         if reason.startswith("LOGIC_"):
             return "logic_gate"
+        if reason.startswith("STOCK_") or "STABILIZED" in reason or reason.startswith("TIMING_"):
+            return "timing_gate"
         return "execution_or_contract_gate"

@@ -110,6 +110,16 @@ class DecisionEngineTests(unittest.TestCase):
         self.assertEqual(result.action, "REJECT")
         self.assertIn("RISK_BUDGET_ZERO", result.reason_codes)
 
+    def test_stock_specific_timing_gate_can_reject_entry(self):
+        result = self.engine.decide(self.context(market_features={
+            "timing_gate": {
+                "eligible": False,
+                "reason_codes": ["STOCK_SPECIFIC_FADE_RISK"],
+            }
+        }))
+        self.assertEqual(result.action, "REJECT")
+        self.assertIn("STOCK_SPECIFIC_FADE_RISK", result.reason_codes)
+
     def test_incomplete_context_can_only_observe(self):
         result = self.engine.decide(self.context(market_microstructure=None))
         self.assertEqual(result.strategy_family, "OBSERVE")
