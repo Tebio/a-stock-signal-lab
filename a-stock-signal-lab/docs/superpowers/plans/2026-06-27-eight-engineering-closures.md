@@ -31,9 +31,9 @@
 
 **Files:** migration `003_intraday_audit_*`, `fenjue/outcomes.py`, CLI增量、测试与 `docs/engineering/03_intraday_outcomes.md`。
 
-- [ ] 先写失败测试：next trade date、四时点、缺bar不可评分、时间可用性。
-- [ ] 新增 `market_bars_audit` 并复用现有 `trade_intents/intraday_outcomes`。
-- [ ] 实现09:25/09:40/10:30/14:30标签回填和CLI，回归并提交。
+- [x] 先写失败测试：next trade date、四时点、缺bar不可评分、时间可用性。
+- [x] 新增 `market_bars_audit` 并复用现有 `trade_intents/intraday_outcomes`。
+- [x] 实现09:25/09:40/10:30/14:30标签回填和CLI，回归并提交。
 
 ### Task 4: Two-phase portfolio budgets
 

@@ -21,6 +21,7 @@ from .workflows import capture_pool_snapshot, scan_pool_regime_shifts
 from .decision import DecisionContext, DecisionEngine
 from .execution import FillAssessment
 from .ledger import PositionLedger, RiskPrecheck
+from .outcomes import IntradayOutcomeBackfiller
 from .v2db import FenjueV2Database
 
 
@@ -196,6 +197,18 @@ def cmd_v2_decide(args: argparse.Namespace) -> int:
         result = DecisionEngine(database).decide(context)
     print_json(asdict(result))
     return 0
+
+
+def cmd_v2_backfill_outcome(args: argparse.Namespace) -> int:
+    calculated_at_ms = args.calculated_at_ms or int(time.time() * 1000)
+    with build_v2_database(args.root) as database:
+        result = IntradayOutcomeBackfiller(database).backfill_intent(
+            args.intent_id,
+            calculation_version=args.calculation_version,
+            calculated_at_ms=calculated_at_ms,
+        )
+    print_json(asdict(result))
+    return 0 if result.outcome_status == "scored" else 2
 
 
 def cmd_build_pool(args: argparse.Namespace) -> int:
@@ -386,6 +399,15 @@ def parser() -> argparse.ArgumentParser:
     )
     v2_decide.add_argument("--context-json", required=True)
     v2_decide.set_defaults(func=cmd_v2_decide)
+
+    v2_outcome = sub.add_parser(
+        "v2-backfill-outcome",
+        help="audit and backfill next-trade-date intraday labels for an intent",
+    )
+    v2_outcome.add_argument("--intent-id", required=True)
+    v2_outcome.add_argument("--calculation-version", required=True)
+    v2_outcome.add_argument("--calculated-at-ms", type=int)
+    v2_outcome.set_defaults(func=cmd_v2_backfill_outcome)
 
     build_pool = sub.add_parser(
         "build-pool", help="build a candidate pool without hardcoded paths or dates"
