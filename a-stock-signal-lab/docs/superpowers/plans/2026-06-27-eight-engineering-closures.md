@@ -39,9 +39,9 @@
 
 **Files:** migration `004_portfolio_budget_*`, `fenjue/budget.py`,测试与 `docs/engineering/04_portfolio_budget.md`。
 
-- [ ] 先写失败测试：资格预检、最终扣减、幂等、逻辑簇上限。
-- [ ] 新增三张预算表和事务化 reserve/consume/release。
-- [ ] 接入 DecisionEngine 风险门，回归并提交。
+- [x] 先写失败测试：资格预检、最终扣减、幂等、逻辑簇上限。
+- [x] 新增三张预算表和事务化 precheck/consume。
+- [x] 通过 `RiskPrecheck` 适配器接入 DecisionEngine 风险门，回归并提交。
 
 ### Task 5: Freeze and override workflow
 

@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from .daily import SinaIndexDailyProvider, TencentDailyProvider
+from .budget import PortfolioBudgetService
 from .data_services import DailyBarService, MinuteBarService, UpstreamGate
 from .engine import FenjueEngine
 from .provider import SinaMinuteProvider, SinaTencentProvider
@@ -211,6 +212,22 @@ def cmd_v2_backfill_outcome(args: argparse.Namespace) -> int:
     return 0 if result.outcome_status == "scored" else 2
 
 
+def cmd_v2_budget(args: argparse.Namespace) -> int:
+    payload = json.loads(Path(args.payload_json).read_text(encoding="utf-8"))
+    with build_v2_database(args.root) as database:
+        service = PortfolioBudgetService(database)
+        if args.operation == "open":
+            budget_id = service.open_budget(**payload)
+            result = {"budget_id": budget_id, "status": "ACTIVE"}
+        elif args.operation == "precheck":
+            result = asdict(service.precheck(**payload))
+        else:
+            consumption_id = payload.pop("consumption_id")
+            result = asdict(service.consume(consumption_id, **payload))
+    print_json(result)
+    return 0
+
+
 def cmd_build_pool(args: argparse.Namespace) -> int:
     argv = ["--top", str(args.top), "--sleep", str(args.sleep)]
     if args.root:
@@ -408,6 +425,13 @@ def parser() -> argparse.ArgumentParser:
     v2_outcome.add_argument("--calculation-version", required=True)
     v2_outcome.add_argument("--calculated-at-ms", type=int)
     v2_outcome.set_defaults(func=cmd_v2_backfill_outcome)
+
+    v2_budget = sub.add_parser(
+        "v2-budget", help="open, precheck, or consume a two-phase portfolio budget"
+    )
+    v2_budget.add_argument("operation", choices=["open", "precheck", "consume"])
+    v2_budget.add_argument("--payload-json", required=True)
+    v2_budget.set_defaults(func=cmd_v2_budget)
 
     build_pool = sub.add_parser(
         "build-pool", help="build a candidate pool without hardcoded paths or dates"

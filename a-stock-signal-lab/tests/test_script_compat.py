@@ -74,6 +74,7 @@ class ScriptCompatibilityTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("build-pool", result.stdout)
         self.assertIn("screen-pool2", result.stdout)
+        self.assertIn("v2-budget", result.stdout)
 
 
 if __name__ == "__main__":
