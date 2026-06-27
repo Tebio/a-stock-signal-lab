@@ -55,9 +55,9 @@
 
 **Files:** migration `006_decision_run_mode_*`, `fenjue/decision.py`, `fenjue/shadow.py`, CLI、测试与 `docs/engineering/06_decision_run_modes.md`。
 
-- [ ] 先写失败测试：research/shadow/production共享图、仅production可执行、未发布策略拒绝。
-- [ ] 增加 `run_mode` 与统一决策图结果持久化。
-- [ ] 保持原 `DecisionEngine.decide(context)` 兼容，回归并提交。
+- [x] 先写失败测试：research/shadow/production共享图、仅production可执行、未发布策略拒绝。
+- [x] 增加 `run_mode` 与统一决策图结果持久化。
+- [x] 保持原 `DecisionEngine.decide(context)` 兼容，回归并提交。
 
 ### Task 7: Baseline runner
 

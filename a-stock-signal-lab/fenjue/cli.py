@@ -196,7 +196,11 @@ def cmd_v2_decide(args: argparse.Namespace) -> int:
         risk_precheck=RiskPrecheck(**risk) if risk else None,
     )
     with build_v2_database(args.root) as database:
-        result = DecisionEngine(database).decide(context)
+        result = DecisionEngine(
+            database,
+            run_mode=args.run_mode,
+            strategy_version_id=args.strategy_version_id,
+        ).decide(context)
     print_json(asdict(result))
     return 0
 
@@ -437,6 +441,11 @@ def parser() -> argparse.ArgumentParser:
         "v2-decide", help="evaluate a complete frozen V2 decision context JSON"
     )
     v2_decide.add_argument("--context-json", required=True)
+    v2_decide.add_argument(
+        "--run-mode", choices=["research", "shadow", "production"],
+        default="research",
+    )
+    v2_decide.add_argument("--strategy-version-id")
     v2_decide.set_defaults(func=cmd_v2_decide)
 
     v2_outcome = sub.add_parser(
