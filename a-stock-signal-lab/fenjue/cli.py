@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+from dataclasses import asdict
 import json
 import os
 import statistics
@@ -16,11 +17,23 @@ from .runtime import Runtime
 from .service import QuoteService
 from .validation import summarize_signal_performance, update_signal_outcomes
 from .workflows import capture_pool_snapshot, scan_pool_regime_shifts
+from .decision import DecisionContext, DecisionEngine
+from .execution import FillAssessment
+from .ledger import PositionLedger, RiskPrecheck
+from .v2db import FenjueV2Database
 
 
 def build_runtime(root: str | None) -> Runtime:
     path = Path(root or os.environ.get("FENJUE_HOME", "~/.fenjue")).expanduser()
     return Runtime(path)
+
+
+def build_v2_database(root: str | None, initialize: bool = True) -> FenjueV2Database:
+    path = Path(root or os.environ.get("FENJUE_HOME", "~/.fenjue")).expanduser()
+    database = FenjueV2Database(path / "data" / "fenjue-v2.sqlite3")
+    if initialize:
+        database.initialize()
+    return database
 
 
 def build_engine(root: str | None, cache_ttl: float = 2) -> FenjueEngine:
@@ -124,6 +137,63 @@ def cmd_init(args: argparse.Namespace) -> int:
     runtime = build_runtime(args.root)
     runtime.initialize()
     print(f"A-Stock Signal Lab database ready: {runtime.db_path}")
+    return 0
+
+
+def cmd_v2_init(args: argparse.Namespace) -> int:
+    with build_v2_database(args.root) as database:
+        probe = database.compatibility_probe()
+        print(
+            f"Fenjue V2 database ready: {database.path} "
+            f"(SQLite {probe['sqlite_version']}, JSON1={probe['json1']})"
+        )
+    return 0
+
+
+def cmd_v2_integrity(args: argparse.Namespace) -> int:
+    with build_v2_database(args.root) as database:
+        report = database.integrity_report()
+    print_json(report)
+    return 0 if (
+        report["integrity_check"] == "ok"
+        and not report["foreign_key_violations"]
+        and not report["violations"]
+    ) else 2
+
+
+def cmd_v2_ledger(args: argparse.Namespace) -> int:
+    now_ms = args.buy_time_ms or int(time.time() * 1000)
+    with build_v2_database(args.root) as database:
+        ledger = PositionLedger(database)
+        ledger.ensure_account(
+            args.account, args.account, args.equity_fen, args.trade_date, now_ms
+        )
+        ledger.set_position(
+            args.account, args.code, args.mode, args.core_floor,
+            args.logic_cluster, "user supplied position", "user", now_ms,
+        )
+        lot_id = ledger.record_buy_lot(
+            args.account, args.code, args.role, args.buy_date, now_ms,
+            args.quantity, args.buy_price, args.sellable_from, "user", now_ms,
+        )
+        context = ledger.position_context(args.account, args.code, args.trade_date)
+        payload = {"lot_id": lot_id, **asdict(context)}
+    print_json(payload)
+    return 0
+
+
+def cmd_v2_decide(args: argparse.Namespace) -> int:
+    payload = json.loads(Path(args.context_json).read_text(encoding="utf-8"))
+    execution = payload.pop("execution", None)
+    risk = payload.pop("risk_precheck", None)
+    context = DecisionContext(
+        **payload,
+        execution=FillAssessment(**execution) if execution else None,
+        risk_precheck=RiskPrecheck(**risk) if risk else None,
+    )
+    with build_v2_database(args.root) as database:
+        result = DecisionEngine(database).decide(context)
+    print_json(asdict(result))
     return 0
 
 
@@ -250,6 +320,43 @@ def parser() -> argparse.ArgumentParser:
 
     initialize = sub.add_parser("init", help="initialize an empty local database")
     initialize.set_defaults(func=cmd_init)
+
+    v2_initialize = sub.add_parser(
+        "v2-init", help="initialize the audited Fenjue V2 database"
+    )
+    v2_initialize.set_defaults(func=cmd_v2_init)
+
+    v2_integrity = sub.add_parser(
+        "v2-integrity", help="run Fenjue V2 integrity and leakage checks"
+    )
+    v2_integrity.set_defaults(func=cmd_v2_integrity)
+
+    v2_ledger = sub.add_parser(
+        "v2-ledger", help="record a user-supplied position lot in the V2 ledger"
+    )
+    v2_ledger.add_argument("--account", required=True)
+    v2_ledger.add_argument("--code", required=True)
+    v2_ledger.add_argument(
+        "--mode", required=True,
+        choices=["CORE_HOLD", "TACTICAL_T", "NEW_ENTRY", "RISK", "OBSERVE"],
+    )
+    v2_ledger.add_argument("--logic-cluster", required=True)
+    v2_ledger.add_argument("--core-floor", required=True, type=int)
+    v2_ledger.add_argument("--quantity", required=True, type=int)
+    v2_ledger.add_argument("--buy-price", required=True)
+    v2_ledger.add_argument("--buy-date", required=True)
+    v2_ledger.add_argument("--sellable-from", required=True)
+    v2_ledger.add_argument("--trade-date", required=True)
+    v2_ledger.add_argument("--equity-fen", required=True, type=int)
+    v2_ledger.add_argument("--buy-time-ms", type=int)
+    v2_ledger.add_argument("--role", choices=["core", "tactical"], default="core")
+    v2_ledger.set_defaults(func=cmd_v2_ledger)
+
+    v2_decide = sub.add_parser(
+        "v2-decide", help="evaluate a complete frozen V2 decision context JSON"
+    )
+    v2_decide.add_argument("--context-json", required=True)
+    v2_decide.set_defaults(func=cmd_v2_decide)
 
     quote = sub.add_parser("quote", help="fetch dual-source realtime quotes")
     quote.add_argument("codes", nargs="+")
