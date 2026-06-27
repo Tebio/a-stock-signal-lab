@@ -205,4 +205,3 @@ def source_health_changed(source, status, now_ms):
 - 所有冻结解除均有独立审计记录和证据。
 - A 级来源不可用期间产生的 `NEW_ENTRY`、`ADD` 许可 0 次。
 - 任一历史决策都能通过 manifest、原始快照和解析版本复原。
-

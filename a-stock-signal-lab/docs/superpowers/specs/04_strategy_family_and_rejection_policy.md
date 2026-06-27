@@ -269,4 +269,3 @@ def decide(context):
 - `CORE_HOLD` 处于 `RETREAT` 时自动加仓 0 次。
 - `probability_status != probability_ready` 时生产概率和概率驱动数量输出 0 次。
 - 事件冻结、逻辑门、市场门、成交门和风险门均可独立回放并定位拒绝原因。
-

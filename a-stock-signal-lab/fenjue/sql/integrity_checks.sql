@@ -141,5 +141,3 @@ WHERE type = 'table' AND name NOT LIKE 'sqlite_%';
 SELECT 'INFO_INDEX_COUNT' AS check_name, COUNT(*) AS value
 FROM sqlite_schema
 WHERE type = 'index' AND name NOT LIKE 'sqlite_%';
-
-

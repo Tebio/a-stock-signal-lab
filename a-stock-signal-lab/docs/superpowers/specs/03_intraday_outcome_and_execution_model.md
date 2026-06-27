@@ -215,4 +215,3 @@ def calculate_outcome(intent, bars, calendar, cost_model):
 - 次日 10:30 超过五分钟无成交时全部 `unscorable`。
 - 成本反转、交易日历、停牌、限价和来源冲突测试通过率 100%。
 - 每个成交评估都能复原评估模型、政策、来源选择版本及实际数据源。
-
