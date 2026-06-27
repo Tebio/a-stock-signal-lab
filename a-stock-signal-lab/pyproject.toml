@@ -16,4 +16,4 @@ fenjue = "fenjue.cli:main"
 packages = ["fenjue"]
 
 [tool.setuptools.package-data]
-fenjue = ["sql/*.sql"]
+fenjue = ["sql/*.sql", "sql/migrations/*.sql"]
