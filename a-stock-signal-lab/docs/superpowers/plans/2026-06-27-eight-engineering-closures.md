@@ -63,9 +63,9 @@
 
 **Files:** migration `007_baseline_runs_*`, `fenjue/baselines.py`, CLI、测试与 `docs/engineering/07_baseline_runner.md`。
 
-- [ ] 先写失败测试：日/簇去重、lift、净期望、覆盖率、Brier、ECE。
-- [ ] 实现相同成本/成交门下的候选与基准对比并持久化。
-- [ ] 输出JSON报告，回归并提交。
+- [x] 先写失败测试：日/簇去重、lift、净期望、覆盖率、Brier、ECE。
+- [x] 实现相同成本/成交门下的候选与基准对比并持久化。
+- [x] 输出JSON报告，回归并提交。
 
 ### Task 8: GitHub Actions
 

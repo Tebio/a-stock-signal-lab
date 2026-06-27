@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .daily import SinaIndexDailyProvider, TencentDailyProvider
 from .budget import PortfolioBudgetService
+from .baseline import BaselineRunner
 from .data_services import DailyBarService, MinuteBarService, UpstreamGate
 from .engine import FenjueEngine
 from .provider import SinaMinuteProvider, SinaTencentProvider
@@ -254,6 +255,19 @@ def cmd_v2_freeze(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_v2_baseline(args: argparse.Namespace) -> int:
+    payload = json.loads(Path(args.payload_json).read_text(encoding="utf-8"))
+    with build_v2_database(args.root) as database:
+        runner = BaselineRunner(database)
+        if args.operation == "register":
+            runner.register_baseline(**payload)
+            result = {"baseline_id": payload["baseline_id"], "status": "registered"}
+        else:
+            result = asdict(runner.run(**payload))
+    print_json(result)
+    return 0
+
+
 def cmd_build_pool(args: argparse.Namespace) -> int:
     argv = ["--top", str(args.top), "--sleep", str(args.sleep)]
     if args.root:
@@ -472,6 +486,13 @@ def parser() -> argparse.ArgumentParser:
     )
     v2_freeze.add_argument("--payload-json", required=True)
     v2_freeze.set_defaults(func=cmd_v2_freeze)
+
+    v2_baseline = sub.add_parser(
+        "v2-baseline", help="register and run auditable strategy-vs-baseline comparisons"
+    )
+    v2_baseline.add_argument("operation", choices=["register", "run"])
+    v2_baseline.add_argument("--payload-json", required=True)
+    v2_baseline.set_defaults(func=cmd_v2_baseline)
 
     build_pool = sub.add_parser(
         "build-pool", help="build a candidate pool without hardcoded paths or dates"
