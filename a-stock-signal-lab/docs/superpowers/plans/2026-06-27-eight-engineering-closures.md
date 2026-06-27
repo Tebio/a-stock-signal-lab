@@ -71,6 +71,6 @@
 
 **Files:** `.github/workflows/quality.yml`, `scripts/ci_*.py`, fixtures、测试与 `docs/engineering/08_ci.md`。
 
-- [ ] 增加 lint、unit、migration dry-run、fixture replay、shadow-vs-baseline regression 五个 job/step。
-- [ ] 本地逐个运行相同命令并保存稳定 fixture。
-- [ ] 验证旧 CLI 帮助与命令不变，提交并推送分支。
+- [x] 增加 lint、unit、migration dry-run、fixture replay、shadow-vs-baseline regression 五个 job/step。
+- [x] 本地逐个运行相同命令并保存稳定 fixture。
+- [x] 验证旧 CLI 帮助与命令不变，提交并推送分支。

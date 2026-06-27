@@ -77,6 +77,12 @@ class ScriptCompatibilityTests(unittest.TestCase):
         self.assertIn("v2-budget", result.stdout)
         self.assertIn("v2-freeze", result.stdout)
         self.assertIn("v2-baseline", result.stdout)
+        for legacy_command in (
+            "init", "v2-init", "v2-integrity", "v2-ledger", "v2-decide",
+            "quote", "analyze", "snapshot", "scan-regime", "validate-signals",
+            "benchmark",
+        ):
+            self.assertIn(legacy_command, result.stdout)
 
 
 if __name__ == "__main__":

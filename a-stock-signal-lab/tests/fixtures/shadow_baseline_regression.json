@@ -1,0 +1,64 @@
+{
+  "baseline_rule": {
+    "kind": "field_equals",
+    "field": "baseline_signal",
+    "value": true
+  },
+  "thresholds": {
+    "minimum_hit_rate_lift_pct_points": 40.0,
+    "minimum_net_expectancy_lift": 2.0,
+    "maximum_strategy_brier_score": 0.15,
+    "required_trade_dates": 2,
+    "required_logic_clusters": 2
+  },
+  "observations": [
+    {
+      "opportunity_id": "o1", "trade_date": "2026-06-26", "logic_cluster_id": "A",
+      "features": {"baseline_signal": true}, "strategy_selected": true,
+      "outcome_status": "scored", "hit_net_3pct": true,
+      "net_return_pct_points": 4.0, "strategy_probability": 0.8, "baseline_probability": 0.55
+    },
+    {
+      "opportunity_id": "o2", "trade_date": "2026-06-26", "logic_cluster_id": "A",
+      "features": {"baseline_signal": true}, "strategy_selected": false,
+      "outcome_status": "scored", "hit_net_3pct": false,
+      "net_return_pct_points": -2.0, "strategy_probability": 0.3, "baseline_probability": 0.45
+    },
+    {
+      "opportunity_id": "o3", "trade_date": "2026-06-26", "logic_cluster_id": "A",
+      "features": {"baseline_signal": false}, "strategy_selected": true,
+      "outcome_status": "scored", "hit_net_3pct": true,
+      "net_return_pct_points": 3.5, "strategy_probability": 0.75, "baseline_probability": 0.4
+    },
+    {
+      "opportunity_id": "o4", "trade_date": "2026-06-26", "logic_cluster_id": "A",
+      "features": {"baseline_signal": false}, "strategy_selected": false,
+      "outcome_status": "scored", "hit_net_3pct": false,
+      "net_return_pct_points": -1.0, "strategy_probability": 0.25, "baseline_probability": 0.35
+    },
+    {
+      "opportunity_id": "o5", "trade_date": "2026-06-29", "logic_cluster_id": "B",
+      "features": {"baseline_signal": true}, "strategy_selected": true,
+      "outcome_status": "scored", "hit_net_3pct": true,
+      "net_return_pct_points": 4.2, "strategy_probability": 0.82, "baseline_probability": 0.58
+    },
+    {
+      "opportunity_id": "o6", "trade_date": "2026-06-29", "logic_cluster_id": "B",
+      "features": {"baseline_signal": true}, "strategy_selected": false,
+      "outcome_status": "scored", "hit_net_3pct": false,
+      "net_return_pct_points": -2.2, "strategy_probability": 0.28, "baseline_probability": 0.42
+    },
+    {
+      "opportunity_id": "o7", "trade_date": "2026-06-29", "logic_cluster_id": "B",
+      "features": {"baseline_signal": false}, "strategy_selected": true,
+      "outcome_status": "scored", "hit_net_3pct": true,
+      "net_return_pct_points": 3.8, "strategy_probability": 0.78, "baseline_probability": 0.38
+    },
+    {
+      "opportunity_id": "o8", "trade_date": "2026-06-29", "logic_cluster_id": "B",
+      "features": {"baseline_signal": false}, "strategy_selected": false,
+      "outcome_status": "unscorable", "hit_net_3pct": null,
+      "net_return_pct_points": null, "strategy_probability": 0.5, "baseline_probability": 0.5
+    }
+  ]
+}
