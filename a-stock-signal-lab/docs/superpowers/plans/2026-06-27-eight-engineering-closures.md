@@ -47,9 +47,9 @@
 
 **Files:** migration `005_event_override_*`, `fenjue/events.py`,测试与 `docs/engineering/05_event_freezes.md`。
 
-- [ ] 先写失败测试：停复牌、问询、处分、重大公告、人工覆盖不能直接解除。
-- [ ] 复用既有冻结/解除表，新增 `override_requests` 和事件政策映射。
-- [ ] 确保冻结优先于技术评分，回归并提交。
+- [x] 先写失败测试：停复牌、问询、处分、重大公告、人工覆盖不能直接解除。
+- [x] 复用既有冻结/解除表，新增 `override_requests` 和事件政策映射。
+- [x] 确保冻结优先于技术评分，回归并提交。
 
 ### Task 6: Decision run modes
 

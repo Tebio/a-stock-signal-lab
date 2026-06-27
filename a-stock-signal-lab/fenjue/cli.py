@@ -21,6 +21,7 @@ from .validation import summarize_signal_performance, update_signal_outcomes
 from .workflows import capture_pool_snapshot, scan_pool_regime_shifts
 from .decision import DecisionContext, DecisionEngine
 from .execution import FillAssessment
+from .events import EventStore
 from .ledger import PositionLedger, RiskPrecheck
 from .outcomes import IntradayOutcomeBackfiller
 from .v2db import FenjueV2Database
@@ -228,6 +229,27 @@ def cmd_v2_budget(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_v2_freeze(args: argparse.Namespace) -> int:
+    payload = json.loads(Path(args.payload_json).read_text(encoding="utf-8"))
+    with build_v2_database(args.root) as database:
+        store = EventStore(database)
+        if args.operation == "apply":
+            event_version_id = payload.pop("event_version_id")
+            result = store.apply_default_freezes(event_version_id, **payload)
+        elif args.operation == "request":
+            freeze_id = payload.pop("freeze_id")
+            result = {"request_id": store.request_override(freeze_id, **payload)}
+        elif args.operation == "review":
+            request_id = payload.pop("request_id")
+            store.review_override(request_id, **payload)
+            result = {"request_id": request_id, "status": "reviewed"}
+        else:
+            freeze_id = payload.pop("freeze_id")
+            result = {"release_audit_id": store.release_freeze(freeze_id, **payload)}
+    print_json(result if isinstance(result, dict) else {"freezes": result})
+    return 0
+
+
 def cmd_build_pool(args: argparse.Namespace) -> int:
     argv = ["--top", str(args.top), "--sleep", str(args.sleep)]
     if args.root:
@@ -432,6 +454,15 @@ def parser() -> argparse.ArgumentParser:
     v2_budget.add_argument("operation", choices=["open", "precheck", "consume"])
     v2_budget.add_argument("--payload-json", required=True)
     v2_budget.set_defaults(func=cmd_v2_budget)
+
+    v2_freeze = sub.add_parser(
+        "v2-freeze", help="apply event freezes and audit override/release workflow"
+    )
+    v2_freeze.add_argument(
+        "operation", choices=["apply", "request", "review", "release"]
+    )
+    v2_freeze.add_argument("--payload-json", required=True)
+    v2_freeze.set_defaults(func=cmd_v2_freeze)
 
     build_pool = sub.add_parser(
         "build-pool", help="build a candidate pool without hardcoded paths or dates"
