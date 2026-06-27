@@ -259,13 +259,6 @@ class PositionLedger:
         at_ms: int,
         market_regime: str,
     ) -> RiskPrecheck:
-        scope_rank = {
-            "symbol": 5,
-            "logic_cluster": 4,
-            "strategy_family": 3,
-            "account": 2,
-            "global": 1,
-        }
         candidates = self.db.connection.execute(
             """
             SELECT * FROM risk_budget_configs
@@ -283,15 +276,29 @@ class PositionLedger:
         ).fetchall()
         if not candidates:
             return RiskPrecheck("UNCONFIGURED", None, None)
-        config = max(candidates, key=lambda row: scope_rank[row["scope_type"]])
-        limit = min(
-            config["max_gross_exposure_ratio"],
-            config["max_single_symbol_ratio"],
-            config["max_logic_cluster_ratio"],
+
+        def applicable_limit(config) -> float:
+            limits = [float(config["max_gross_exposure_ratio"])]
+            if config["scope_type"] == "symbol":
+                limits.append(float(config["max_single_symbol_ratio"]))
+            elif config["scope_type"] == "logic_cluster":
+                limits.append(float(config["max_logic_cluster_ratio"]))
+            elif config["scope_type"] == "strategy_family":
+                family_limits = json.loads(config["family_limits_json"] or "{}")
+                if strategy_family in family_limits:
+                    limits.append(float(family_limits[strategy_family]))
+            limit = min(limits)
+            if market_regime == "RETREAT":
+                limit *= float(config["retreat_exposure_multiplier_ratio"])
+            return limit
+
+        constrained = [(applicable_limit(config), config) for config in candidates]
+        limit, config = min(constrained, key=lambda item: item[0])
+        return RiskPrecheck(
+            "ELIGIBLE" if limit > 0 else "BLOCKED",
+            config["config_id"],
+            limit,
         )
-        if market_regime == "RETREAT":
-            limit *= config["retreat_exposure_multiplier_ratio"]
-        return RiskPrecheck("ELIGIBLE" if limit > 0 else "BLOCKED", config["config_id"], limit)
 
     def record_reconciliation_incident(
         self,

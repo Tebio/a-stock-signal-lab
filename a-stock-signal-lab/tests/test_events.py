@@ -80,6 +80,12 @@ class EventStoreTests(unittest.TestCase):
             "SELECT COUNT(*) FROM freeze_release_audits WHERE freeze_id=?", (freeze,)
         ).fetchone()[0]
         self.assertEqual(count, 1)
+        with self.assertRaises(ValueError):
+            self.events.release_freeze(
+                freeze, actor="user", release_type="manual",
+                evidence={"reviewed": True}, policy_version="freeze-policy-v1",
+                released_at_ms=950,
+            )
 
     def test_a_tier_source_outage_blocks_new_risk_until_resolved(self):
         incident = self.events.record_source_incident(

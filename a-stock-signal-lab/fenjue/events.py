@@ -172,6 +172,13 @@ class EventStore:
     ) -> str:
         audit_id = f"freeze-release-{uuid4().hex}"
         with self.db.transaction() as connection:
+            freeze = connection.execute(
+                "SELECT status FROM event_freezes WHERE freeze_id=?", (freeze_id,)
+            ).fetchone()
+            if freeze is None:
+                raise KeyError(f"freeze not found: {freeze_id}")
+            if freeze["status"] != "active":
+                raise ValueError(f"freeze is not active: {freeze_id}")
             connection.execute(
                 """
                 INSERT INTO freeze_release_audits

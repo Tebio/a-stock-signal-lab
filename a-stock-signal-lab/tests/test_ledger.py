@@ -71,6 +71,31 @@ class PositionLedgerTests(unittest.TestCase):
                 "risk-2", effective_from_ms=5, effective_to_ms=20, **common
             )
 
+    def test_risk_precheck_uses_most_restrictive_applicable_scope(self):
+        common = dict(
+            strategy_family=None, effective_from_ms=1, effective_to_ms=100,
+            max_daily_loss_ratio=0.05, max_single_trade_loss_ratio=0.02,
+            consecutive_failure_limit=3, retreat_exposure_multiplier_ratio=0.5,
+            family_limits={}, created_at_ms=1,
+        )
+        self.ledger.add_risk_budget(
+            "account-risk", account_id="main", scope_type="account", scope_id=None,
+            max_gross_exposure_ratio=0.10, max_single_symbol_ratio=0.8,
+            max_logic_cluster_ratio=0.8, **common,
+        )
+        self.ledger.add_risk_budget(
+            "symbol-risk", account_id="main", scope_type="symbol", scope_id="600378",
+            max_gross_exposure_ratio=0.8, max_single_symbol_ratio=0.20,
+            max_logic_cluster_ratio=0.8, **common,
+        )
+        result = self.ledger.risk_precheck(
+            account_id="main", code="600378", strategy_family="NEW_ENTRY",
+            logic_cluster_id="electronic_specialty_gases", at_ms=5,
+            market_regime="NEUTRAL",
+        )
+        self.assertEqual(result.config_id, "account-risk")
+        self.assertEqual(result.max_incremental_exposure_ratio, 0.10)
+
     def test_database_rejects_remaining_quantity_above_original(self):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.connection.execute(
