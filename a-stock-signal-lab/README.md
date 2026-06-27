@@ -32,11 +32,12 @@ python -m unittest discover -s tests -v
 
 ```bash
 pip install akshare pandas
-cd fenjue-pkg/scripts
-python3 build_pool.py --date 20260612 --top 300
-python3 screen_pool.py pool_YYYYMMDD.json    # 策略1-3
-python3 screen_pool2.py pool_YYYYMMDD.json   # 策略4-6 + 跨策略交集
+python -m fenjue --root ~/.fenjue build-pool --date 20260612 --top 300
+python -m fenjue --root ~/.fenjue screen-pool pool_YYYYMMDD.json
+python -m fenjue --root ~/.fenjue screen-pool2 pool_YYYYMMDD.json
 ```
+
+Hermes 旧调度仍可调用 `scripts/build_pool.py`、`screen_pool.py`、`screen_pool2.py`；固定 `/opt` 路径和静态日期默认值已移除。
 
 深度分析：
 

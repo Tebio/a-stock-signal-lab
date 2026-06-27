@@ -23,9 +23,9 @@
 
 **Files:** `scripts/build_pool.py`, `scripts/screen_pool.py`, `scripts/screen_pool2.py`, `scripts/compat_*.py`, `tests/test_script_compat.py`, `docs/engineering/02_script_compat.md`。
 
-- [ ] 先写失败测试：任意工作目录、显式日期、环境根目录、旧参数 wrapper。
-- [ ] 清理硬编码路径和运行日默认值；日期缺失时明确取上海当前日期并输出来源。
-- [ ] 保留旧入口 wrapper，运行原 CLI 回归并提交。
+- [x] 先写失败测试：任意工作目录、显式日期、环境根目录、旧参数 wrapper。
+- [x] 清理硬编码路径和运行日默认值；日期缺失时明确取上海当前日期并输出来源。
+- [x] 保留旧入口 wrapper，运行原 CLI 回归并提交。
 
 ### Task 3: Audited intraday labels
 

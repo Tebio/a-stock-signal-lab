@@ -13,6 +13,7 @@ from .daily import SinaIndexDailyProvider, TencentDailyProvider
 from .data_services import DailyBarService, MinuteBarService, UpstreamGate
 from .engine import FenjueEngine
 from .provider import SinaMinuteProvider, SinaTencentProvider
+from .pool_scripts import main_build_pool, main_screen_pool, main_screen_pool2
 from .runtime import Runtime
 from .service import QuoteService
 from .validation import summarize_signal_performance, update_signal_outcomes
@@ -197,6 +198,34 @@ def cmd_v2_decide(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_pool(args: argparse.Namespace) -> int:
+    argv = ["--top", str(args.top), "--sleep", str(args.sleep)]
+    if args.root:
+        argv.extend(["--root", args.root])
+    if args.date:
+        argv.extend(["--date", args.date])
+    if args.out_dir:
+        argv.extend(["--out-dir", args.out_dir])
+    return main_build_pool(argv)
+
+
+def _screen_pool_command(args: argparse.Namespace, entrypoint) -> int:
+    argv = []
+    if args.root:
+        argv.extend(["--root", args.root])
+    if args.pool_file:
+        argv.append(args.pool_file)
+    return entrypoint(argv)
+
+
+def cmd_screen_pool(args: argparse.Namespace) -> int:
+    return _screen_pool_command(args, main_screen_pool)
+
+
+def cmd_screen_pool2(args: argparse.Namespace) -> int:
+    return _screen_pool_command(args, main_screen_pool2)
+
+
 def cmd_quote(args: argparse.Namespace) -> int:
     service = QuoteService(SinaTencentProvider(), cache_ttl=args.cache_ttl)
     payload = service.get_quotes(args.codes)
@@ -357,6 +386,27 @@ def parser() -> argparse.ArgumentParser:
     )
     v2_decide.add_argument("--context-json", required=True)
     v2_decide.set_defaults(func=cmd_v2_decide)
+
+    build_pool = sub.add_parser(
+        "build-pool", help="build a candidate pool without hardcoded paths or dates"
+    )
+    build_pool.add_argument("--date")
+    build_pool.add_argument("--out-dir")
+    build_pool.add_argument("--top", type=int, default=300)
+    build_pool.add_argument("--sleep", type=float, default=0.4)
+    build_pool.set_defaults(func=cmd_build_pool)
+
+    screen_pool = sub.add_parser(
+        "screen-pool", help="run compatibility pool strategies 1-3"
+    )
+    screen_pool.add_argument("pool_file", nargs="?")
+    screen_pool.set_defaults(func=cmd_screen_pool)
+
+    screen_pool2 = sub.add_parser(
+        "screen-pool2", help="run compatibility pool strategies 4-6"
+    )
+    screen_pool2.add_argument("pool_file", nargs="?")
+    screen_pool2.set_defaults(func=cmd_screen_pool2)
 
     quote = sub.add_parser("quote", help="fetch dual-source realtime quotes")
     quote.add_argument("codes", nargs="+")
