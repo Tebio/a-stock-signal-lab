@@ -1,128 +1,253 @@
-# A-Stock Signal Lab — A股短线技术研究系统
+# 焚诀｜A 股短线研究与持仓决策辅助
 
-基于 MA5/MA20 金叉、MACD、成交额等多策略交叉筛选沪深主板强势标的。
+焚诀不是给你随手报一只“明天必涨”的票，也不是看到高开就机械喊买卖。它做的事情更朴素：把你为什么买、现在处在什么市场环境、这只票平时怎么走、有没有公告风险、盘中是否真的能成交，放在一起梳理，然后告诉你更适合继续拿、做 T、控制风险，还是先别动。
 
-## V2审计决策层（工程闭环版）
+它不会替你下单，但会尽量把每个判断的理由、风险和失效条件说清楚。
 
-V2 不负责自动下单，而是在旧行情分析之上增加一条可回放的持仓决策链：
+## 哪些时候适合问焚诀
+
+- 你已经买入，不确定明天应该继续拿、做 T 还是减仓。
+- 你看好一只票的产业或事件逻辑，但不知道这个逻辑到底硬不硬。
+- 你担心情绪退潮，怕加仓后吃大面，也怕卖掉以后反 T。
+- 你想结合竞价、09:40、10:30 或 14:30 再决定是否出手。
+- 你发现这只票经常冲高回落，或者喜欢先杀再走 V，想用它自己的历史习惯判断时机。
+- 你担心停复牌、监管问询、纪律处分、减持、业绩变化等消息还没被技术图形反映。
+
+## 最好告诉它这些信息
+
+不需要提供券商导出的完整成交单。通常给出下面几项，就能开始分析：
+
+1. 股票代码或名称。
+2. 买入价格和大致时间，例如“9:40 打板买入”或“10:30 企稳后买入”。
+3. 持仓数量或大约几成仓，有没有必须保留的核心仓。
+4. 当时为什么买，是做一天短线、准备做 T，还是打算按逻辑持有。
+5. 你能接受的大概止损范围，以及现在最担心的问题。
+
+如果关键信息缺失，焚诀会告诉你还缺什么。它不会假装拿到了你的成交价、盘口队列或实时公告。
+
+## 三种常用问法
+
+### 1. 已经买入，判断继续拿还是防守
 
 ```text
-持仓账本 → 时间可用事件 → 监管冻结 → 策略族 → 硬逻辑门
-→ 市场/个股股性 → 成交可达性 → 风险预算 → 动作或拒绝 → 影子结果
+我今天 10:30 左右以 12.60 元买入这只票，目前大约三成仓。
+我看好的是六氟化钨涨价逻辑，但又担心板块退潮。
+请先检查这个逻辑有没有可靠证据，再结合公告、市场情绪、个股股性和早盘承接，
+判断明天更适合继续拿、做 T、减仓还是观察。
+请写清楚主要风险、失效条件和下一检查点。
 ```
 
-关键能力：
+### 2. 有底仓，想做 T 但怕反 T
 
-- 用户给出买价和大致时间即可记录批次，严格执行 T+1 和核心仓下限。
-- 区分核心持有、做T、新买、风险和观察，拒绝用一个总分掩盖冲突。
-- 官方源中断、停复牌和监管事件可以冻结新增风险，解除必须留审计。
-- 次交易日 09:25、09:40、10:30、14:30 分开回填，并审计每个时点实际使用的行情 bar。
-- 涨跌停没有盘口流动性证据时不假定成交；次日10:30收益扣完整成本。
-- 未达到100个独立样本、60个交易日和校准门槛时不发布精确概率。
-- research、shadow、production 使用相同决策图；仅已发布 production 策略可标记为可执行。
-- baseline runner 同时报告 lift、净期望、覆盖率、Brier Score 和校准误差。
+```text
+我有这只票的底仓，成本 18.20 元，核心仓不想动，战术仓可以做 T。
+我通常盈利约 3 个点考虑高抛，亏损 3—5 个点会考虑止损。
+请先判断它最近更容易冲高回落还是走 V，再结合今天的板块和盘口，
+告诉我什么条件下可以考虑做 T，什么情况下宁可不做。
+没有可靠实时数据时不要编价格，直接告诉我需要补什么。
+```
+
+### 3. 观察新买机会，不想为了交易而交易
+
+```text
+我正在观察这只票，准备在 09:40、10:30 或 14:30 决定是否新买。
+请先查停复牌、公告和监管风险，再核对它的底层逻辑、板块地位、竞价强度、
+个股股性、成交可能性和风险预算。
+如果证据不够、情绪退潮或买不到，请直接拒绝，不要硬给买点。
+```
+
+## 它会先判断你属于哪种情况
+
+焚诀不会把所有问题混成一个总分，而是先区分五种情况：
+
+| 情况 | 它重点解决什么 |
+|---|---|
+| 核心持有 | 原来的逻辑有没有失效，是否值得继续留住核心仓 |
+| 做 T | 有没有适合战术高抛低吸的空间，怎样避免卖飞或反 T |
+| 新买或加仓 | 当前环境、消息、时机和风险额度是否同时允许新增风险 |
+| 风险处理 | 停复牌、监管、重大公告或亏损扩大时，先考虑怎样活下来 |
+| 继续观察 | 证据不够时等待下一检查点，不为了给答案强行交易 |
+
+底层逻辑很强，不代表今天就适合买；盘口很强，也不能覆盖监管风险。焚诀会把这些判断分开，不让一个高分掩盖另一个明显的问题。
+
+## 焚诀是怎么想这件事的
+
+它大致会按下面的顺序检查：
+
+1. **先看信息是不是当时就能知道。** 后来才发布的公告，不能拿去解释之前的买点。
+2. **再看有没有必须先冻结的风险。** 停牌、问询、纪律处分和重大负面公告优先于技术评分。
+3. **判断你的持仓目的。** 核心持有、做 T 和新买使用不同标准。
+4. **检查底层逻辑。** 区分公司直接受益、产业链间接受益和单纯蹭概念。
+5. **看市场和板块。** 情绪退潮时，即使个股逻辑不错，也会压低新增仓位。
+6. **看这只票自己的股性。** 冲高回落、走 V、连板或趋势票不能套同一套节奏。
+7. **检查成交可能性。** 涨停排不到、跌停卖不出时，不会把理论价格当成真实成交。
+8. **最后才给动作和风险上限。** 先判断有没有资格动，再决定最多能动多少。
+
+## 一份结果应该怎么看
+
+焚诀的完整回答通常会接近下面这样：
+
+```text
+当前情况：做 T / 核心持有 / 新买观察 / 风险处理 / 继续观察
+建议动作：现在做什么，或者为什么暂时不动
+主要理由：逻辑、事件、市场、板块、股性和盘口分别怎样
+风险上限：最多承担多大新增风险，哪些仓位不能动
+数据状态：哪些已确认，哪些缺失，行情和公告看到什么时间
+失效条件：发生什么以后，原来的判断不再成立
+下一检查点：09:25、09:40、10:30、14:30 或下一个交易日
+```
+
+### 它能不能直接告诉你挂什么价格
+
+有可靠实时行情、盘口和涨跌停规则时，它可以给出价格区间、触发条件或观察位置，但仍然只是研究参考。没有这些数据时，它不会编一个看起来很精确的数字。
+
+对涨停买入，如果没有排队和成交证据，它会标记为“成交未知”；对跌停卖出，如果没有买盘证据，也不会假设你一定卖得掉。
+
+## 哪些情况下它会拒绝给交易动作
+
+- 官方公告或关键行情源不可用，无法排除重大风险。
+- 股票正处于停牌、监管冻结或重大事件待确认状态。
+- 候选池已经过期，或者使用的数据在决策时点还不可见。
+- 涨跌停附近缺少真实成交证据。
+- 没有确认风险预算，却要求系统自动给出仓位。
+- 历史样本太少，只能看到粗略频率，不能发布精确概率。
+- 市场明显退潮，新增风险超过账户、单票或同一逻辑板块的上限。
+
+“不交易”也是一个正式结论。少做低质量机会，比勉强找理由出手更重要。
+
+## 关于竞价高开
+
+高开区间可以作为观察线索，但不能直接等同于买卖信号：
+
+- 高开 1%—3%：可能存在预期差，也可能只是普通跟随，需要看量能和板块联动。
+- 高开 4%—7%：既可能走强，也容易冲高回落，要重点看承接和个股历史股性。
+- 高开 8%—10%：可能快速封板，也可能开盘兑现；没有排队证据时不能假设一定买得到。
+
+最终仍要结合隔夜消息、板块地位、昨日换手、市场情绪和这只票自己的行为样本。
+
+## 安装方法
+
+### 直接让 Agent 安装
+
+把下面这句话发给 Hermes、Codex 或其他支持 Skill 的 Agent：
+
+```text
+请安装并使用焚诀：https://github.com/Tebio/a-stock-signal-lab/tree/main/a-stock-signal-lab
+```
+
+安装或升级以后，建议新建会话，让 Agent 重新读取最新版说明。
+
+### Codex 安装命令
 
 ```bash
+python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --url https://github.com/Tebio/a-stock-signal-lab/tree/main/a-stock-signal-lab
+```
+
+### 本地安装和初始化
+
+```bash
+cd a-stock-signal-lab
+python -m pip install -e .
 python -m fenjue --root ~/.fenjue v2-init
 python -m fenjue --root ~/.fenjue v2-integrity
-python -m unittest discover -s tests -v
 ```
 
-### 新工程命令
+Hermes 建议使用 `/opt/data/fenjue` 保存持久数据。升级 Skill 时不要删除这个运行目录。
+
+## 常用命令
+
+### 建池和六策略筛选
 
 ```bash
-# 回填某个意图的次交易日四时点标签
-python -m fenjue --root ~/.fenjue v2-backfill-outcome \
-  --intent-id intent-123 --calculation-version outcome-v1
-
-# 两阶段预算（payload 分别对应 open / precheck / consume）
-python -m fenjue --root ~/.fenjue v2-budget precheck --payload-json budget.json
-
-# 事件冻结及人工申请/复核/解除
-python -m fenjue --root ~/.fenjue v2-freeze apply --payload-json event.json
-
-# 相同机会集上的策略与基准对照
-python -m fenjue --root ~/.fenjue v2-baseline run --payload-json baseline-run.json
-
-# 三运行模式；shadow 与 production 必须绑定策略版本
-python -m fenjue --root ~/.fenjue v2-decide --context-json context.json \
-  --run-mode shadow --strategy-version-id strategy-shadow-v1
-```
-
-每个闭环的表结构、接口、伪代码、回滚方案和测试样例见 `docs/engineering/01_*.md` 至 `08_*.md`。
-
-详细契约见 `docs/superpowers/specs/`。Hermes 中建议将 `/opt/data/fenjue` 作为持久目录，升级前备份旧 Skill、数据库和配置。
-
-## 快速开始
-
-```bash
-pip install akshare pandas
 python -m fenjue --root ~/.fenjue build-pool --date 20260612 --top 300
 python -m fenjue --root ~/.fenjue screen-pool pool_YYYYMMDD.json
 python -m fenjue --root ~/.fenjue screen-pool2 pool_YYYYMMDD.json
 ```
 
-Hermes 旧调度仍可调用 `scripts/build_pool.py`、`screen_pool.py`、`screen_pool2.py`；固定 `/opt` 路径和静态日期默认值已移除。
+旧调度仍可调用 `scripts/build_pool.py`、`scripts/screen_pool.py` 和 `scripts/screen_pool2.py`。
 
-深度分析：
-
-```bash
-cd fenjue-pkg
-python3 -m fenjue --root . analyze 600176 002129 --json
-```
-
-## 新增功能（v2）
-
-### CLI 新命令
+### 记录你提供的持仓
 
 ```bash
-# 09:25 竞价快照 + Strategy B 研究候选（盘中用）
-python -m fenjue --root . snapshot --pool-file pool.json --output-dir snapshots/
-
-# 主池全量逆市切换扫描（盘后用）
-python -m fenjue --root . scan-regime --pool-file pool.json
-
-# 信号结果回填验证（回测5T/10T/20T）
-python -m fenjue --root . validate-signals --signal-type regime_shift
+python -m fenjue --root ~/.fenjue v2-ledger \
+  --account main --code 600000 --mode CORE_HOLD \
+  --logic-cluster example_logic --core-floor 500 --quantity 1000 \
+  --buy-price 12.60 --buy-date 2026-06-28 \
+  --sellable-from 2026-06-29 --trade-date 2026-06-28 \
+  --equity-fen 10000000
 ```
 
-### 新模块
-- `fenjue/pool.py` — 池过期校验：>1T 警告，>3T 拒绝
-- `fenjue/validation.py` — 信号回测：独立日期统计、胜率/盈亏比
-- `fenjue/workflows.py` — 竞价快照 + Strategy B + 逆市切换
+### 运行研究或影子判断
 
----
+```bash
+python -m fenjue --root ~/.fenjue v2-decide \
+  --context-json context.json --run-mode research
 
-## 六策略
-
-| # | 策略 | 条件 |
-|---|------|------|
-| 1 | 快金叉 | MA5/MA20差 -8%~+3% + 成交>1亿 |
-| 2 | 底部潜伏 | 涨<5% + 成交3-15亿 + 非热门板块 |
-| 3 | 低位金叉+量 | 同1 + 涨-3%~+3% + 成交>3亿 |
-| 4 | 大成交暗流 | 成交>15亿 + 涨<5% |
-| 5 | 板块共振+个股低位 | 板块≥3只在池 + 个股涨<3% |
-| 6 | 多因子评分 | 涨2-7% + 成交>5亿 + MA20乖离<25% |
-
-**跨策略交集（≥2策）为候选观察，不=胜率叠加。**
-
----
-
-## 规则
-
-1. 仅沪深主板，排除科创/创业/北交/ST
-2. 池>1T警告，>3T拒绝
-3. 禁止引用旧版90-97%胜率（存在未来函数）
-4. Strategy B 旧11样本91%不得写成稳定胜率
-5. 同日多股触发只算一个独立日期
-6. 不替用户下单
-
-## 目录
-
+python -m fenjue --root ~/.fenjue v2-decide \
+  --context-json context.json --run-mode shadow \
+  --strategy-version-id strategy-shadow-v1
 ```
-fenjue-pkg/
-├── fenjue/          # Python 核心（CLI + 引擎 + 校验 + 工作流）
-├── scripts/         # 建池 + 六策略筛选
-├── references/      # 策略文档 + 回测记录
-└── README.md
+
+研究模式和影子模式不会输出可执行下单动作。即使在正式模式，焚诀也不连接券商、不自动下单。
+
+### 回填次交易日盘中结果
+
+```bash
+python -m fenjue --root ~/.fenjue v2-backfill-outcome \
+  --intent-id intent-123 --calculation-version outcome-v1
 ```
+
+系统会分别记录次交易日 09:25、09:40、10:30 和 14:30 的结果，并保留实际使用了哪根行情数据。
+
+### 事件冻结、风险预算和基准比较
+
+```bash
+python -m fenjue --root ~/.fenjue v2-freeze apply --payload-json event.json
+python -m fenjue --root ~/.fenjue v2-budget precheck --payload-json budget.json
+python -m fenjue --root ~/.fenjue v2-baseline run --payload-json baseline-run.json
+```
+
+## 六个候选筛选策略
+
+这些策略只负责产生观察候选，不等于直接买入：
+
+| # | 策略 | 主要条件 |
+|---|---|---|
+| 1 | 快金叉 | MA5 与 MA20 接近或刚转强，同时有基本成交额 |
+| 2 | 底部潜伏 | 涨幅不高、成交适中、暂时不是过热板块 |
+| 3 | 低位金叉加量 | 低位均线转强，同时出现成交放大 |
+| 4 | 大成交暗流 | 成交活跃但涨幅尚未过热 |
+| 5 | 板块共振加个股低位 | 板块内多只股票进入候选，个股仍处相对低位 |
+| 6 | 多因子评分 | 综合涨幅、成交额和均线乖离筛选 |
+
+同一只票被多个策略选中，只代表值得继续观察，不代表胜率可以直接相加。
+
+## 验证和风险规则
+
+1. 默认只研究沪深主板，排除科创板、创业板、北交所和 ST。
+2. 候选池超过 1 个交易日会提醒，超过 3 个交易日会拒绝继续使用。
+3. 禁止引用旧版 90%—97% 胜率；其中存在样本过少或未来信息污染问题。
+4. 同一天多只股票触发，不能当成多个完全独立的成功样本。
+5. 统计不仅看“有没有赚 3%”，还会看失败时亏多少、净期望、覆盖率和结果是否校准。
+6. 新策略先在研究和影子模式运行，只有通过样本量、时间跨度和回归门槛后才允许进入正式模式。
+
+运行完整检查：
+
+```bash
+python -m unittest discover -s tests -v
+python scripts/ci_migration_dry_run.py
+python scripts/ci_fixture_replay.py
+python scripts/ci_shadow_baseline_regression.py
+```
+
+## 进一步了解
+
+- Agent 使用规则：`SKILL.md`
+- 已验证策略：`references/verified-strategies.md`
+- 八个工程闭环：`docs/engineering/`
+- 持仓、事件、成交、策略族与影子治理：`docs/superpowers/specs/`
+
+## 重要提醒
+
+本项目只用于数据研究、交易复盘和决策辅助，不构成投资建议或买卖指令。焚诀不会替你承担亏损，也不应该替代你对仓位、流动性和个人风险承受能力的判断。
