@@ -23,7 +23,15 @@ class FenjueV2DatabaseTests(unittest.TestCase):
             "SELECT name FROM sqlite_schema "
             "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
         ).fetchall()
-        self.assertEqual(len(tables), 30)
+        table_names = {row[0] for row in tables}
+        self.assertTrue(
+            {"schema_migrations", "trading_calendar", "market_bars_audit",
+             "intraday_checkpoint_labels"}.issubset(table_names)
+        )
+        applied = self.db.connection.execute(
+            "SELECT COUNT(*) FROM schema_migrations WHERE version='001'"
+        ).fetchone()[0]
+        self.assertEqual(applied, 1)
         self.assertEqual(self.db.connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
 
     def test_rejects_orphan_audit_row(self):

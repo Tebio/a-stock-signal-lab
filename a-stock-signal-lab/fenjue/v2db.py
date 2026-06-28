@@ -5,6 +5,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from .migrations import MigrationRunner
+
 
 class FenjueV2Database:
     """SQLite boundary for the V2 audit and decision system.
@@ -35,6 +37,9 @@ class FenjueV2Database:
     def initialize(self) -> None:
         schema = (self.resource_dir / "schema_v2.sql").read_text(encoding="utf-8")
         self.connection.executescript(schema)
+        MigrationRunner(
+            self.connection, self.resource_dir / "migrations"
+        ).apply_all()
         if self.connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise RuntimeError("Fenjue V2 schema failed SQLite integrity_check")
 

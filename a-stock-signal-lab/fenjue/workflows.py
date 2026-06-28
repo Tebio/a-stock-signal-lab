@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .pool import validate_pool_date
 from .service import is_main_board, normalize_code
+from .trading_calendar import TradingCalendar
 
 
 def load_pool_codes(pool_file: str | Path) -> list[str]:
@@ -77,6 +78,7 @@ def capture_pool_snapshot(
     *,
     now: datetime | None = None,
     output_dir: str | Path,
+    calendar: TradingCalendar | None = None,
 ) -> dict:
     now = now or datetime.now()
     codes = load_pool_codes(pool_file)
@@ -85,8 +87,13 @@ def capture_pool_snapshot(
     result = quotes.get_quotes(codes)
     quote_map = result.get("quotes", {})
     quote_rows = list(quote_map.values())
+    is_trade_day = (
+        calendar.is_trade_day(now.date().isoformat())
+        if calendar is not None
+        else TradingCalendar.compatibility_is_weekday(now.date())
+    )
     is_live_window = (
-        now.weekday() < 5
+        is_trade_day
         and now.hour == 9
         and 24 <= now.minute <= 26
     )
